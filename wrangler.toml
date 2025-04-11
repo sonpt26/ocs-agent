@@ -15,4 +15,9 @@ enabled = true
 
 [env.production.vars]
 DEEPSEEK_API_KEY = "sk-c1025eafaea049909360bb3ef9add2a9"
-SQL_API_BASE_URL = "https://ocs-backend-1740.ptson117.workers.dev"
+SQL_API_BASE_URL = "https://restless-tree-1740.ptson117.workers.dev"
+
+[[env.production.services]]
+binding = "OCS_BACKEND"
+service = "restless-tree-1740"
+environment = "production"

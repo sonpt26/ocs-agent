@@ -16,7 +16,7 @@ const processing = new Map();
 const DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions";
 
 // Function to call SQL API
-async function callSqlApi(query, sqlApiBaseUrl, socket) {
+async function callSqlApi(query, sqlApiBaseUrl, socket, env) {
   const upperQuery = query.toUpperCase();
   let url = "";
   if (upperQuery.includes("SELECT")) {
@@ -37,18 +37,21 @@ async function callSqlApi(query, sqlApiBaseUrl, socket) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ query }),
-    }
-    socket.send(
-      JSON.stringify({ progress: "Call API " + url + ". query " + query + ". rq " + JSON.stringify(rq) })
-    );
-    const response = await fetch(url, rq);        
-    if (!response.ok) {
+    }    
+    const response = await env.OCS_BACKEND.fetch(url, rq);            
+    if (!response.ok) {      
       throw new Error(`HTTP error ${response.status}`);
     }
     const data = await response.json();
     console.log("Response from backend:", data);
+    socket.send(
+      JSON.stringify({ progress: "Call API " + url + ". response " + response.status})
+    );
     return data;
-  } catch (error) {    
+  } catch (error) {
+    socket.send(
+      JSON.stringify({ progress: "Call API " + url + ". query: " + JSON.stringify(query) + ". error " + error.message })
+    );    
     return { error: `API call error: ${error.message}` };
   }
 }
@@ -208,7 +211,7 @@ export default {
                   break;
                 }
 
-                const result = await callSqlApi(query, SQL_API_BASE_URL, serverWebSocket);
+                const result = await callSqlApi(query, SQL_API_BASE_URL, serverWebSocket, env);
                 const resultStr = JSON.stringify(result);
                 messages.push({
                   role: "tool",
@@ -231,7 +234,7 @@ export default {
                   break;
                 }
 
-                const result = await callSqlApi(query, SQL_API_BASE_URL);
+                const result = await callSqlApi(query, SQL_API_BASE_URL, serverWebSocket, env);
                 const resultStr = JSON.stringify(result);
                 messages.push({
                   role: "tool",
