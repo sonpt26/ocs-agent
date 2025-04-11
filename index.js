@@ -8,7 +8,7 @@ const TOOLS = functionSchemas.map(schema => ({
   function: schema,
 }));
 
-// In-memory stores (reset on Worker restart; use Durable Objects for persistence)
+// In-memory stores
 const conversations = new Map();
 const processing = new Map();
 
@@ -16,17 +16,17 @@ const processing = new Map();
 const DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions";
 
 // Function to call SQL API
-async function callSqlApi(query) {
+async function callSqlApi(query, sqlApiBaseUrl) {
   const upperQuery = query.toUpperCase();
   let url = "";
   if (upperQuery.includes("SELECT")) {
-    url = "https://34ee5145-restless-tree-1740.ptson117.workers.dev/api/sql/query";
+    url = `${sqlApiBaseUrl}/api/sql/query`;
   } else if (
     upperQuery.includes("INSERT") ||
     upperQuery.includes("UPDATE") ||
     upperQuery.includes("DELETE")
   ) {
-    url = "https://34ee5145-restless-tree-1740.ptson117.workers.dev/api/sql/mutate";
+    url = `${sqlApiBaseUrl}/api/sql/mutate`;
   } else {
     return { error: "Invalid query type" };
   }
@@ -62,21 +62,24 @@ function generateUuid() {
 // WebSocket handler
 export default {
   async fetch(request, env, ctx) {
-    // Debug: Log available env keys to verify bindings
     console.log("Environment keys:", Object.keys(env));
 
-    // Load system prompt from environment variable
     const SYSTEM_PROMPT = promptMd;
     if (!SYSTEM_PROMPT) {
       console.error("PROMPT_MD not set in environment");
       return new Response("Error: PROMPT_MD environment variable not set", { status: 500 });
     }
 
-    // Load API key from environment
     const DEEPSEEK_API_KEY = env.DEEPSEEK_API_KEY;
     if (!DEEPSEEK_API_KEY) {
       console.error("DEEPSEEK_API_KEY not set in environment");
       return new Response("Error: DEEPSEEK_API_KEY environment variable not set", { status: 500 });
+    }
+
+    const SQL_API_BASE_URL = env.SQL_API_BASE_URL;
+    if (!SQL_API_BASE_URL) {
+      console.error("SQL_API_BASE_URL not set in environment");
+      return new Response("Error: SQL_API_BASE_URL environment variable not set", { status: 500 });
     }
 
     if (request.headers.get("Upgrade") !== "websocket") {
@@ -94,6 +97,47 @@ export default {
       },
     ]);
     processing.set(conversationId, false);
+
+    // Gửi thông điệp giới thiệu từ DeepSeek API
+    try {
+      const introMessages = [
+        {
+          role: "system",
+          content: `${SYSTEM_PROMPT}\n\nHãy tạo một thông điệp giới thiệu ngắn gọn về bản thân, mô tả bạn là DeepSeek, một trợ lý AI có khả năng thực thi truy vấn SQL (SELECT với run_sql_query, INSERT/UPDATE/DELETE với run_sql_mutation), và mời người dùng bắt đầu sử dụng bạn. Dùng tiếng Việt.`
+        }
+      ];
+
+      console.log("Calling DeepSeek API for intro message with payload:", {
+        model: "deepseek-chat",
+        messages: introMessages,
+      });
+
+      const introResponse = await fetch(DEEPSEEK_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          messages: introMessages,
+        }),
+      });
+
+      if (!introResponse.ok) {
+        const errorBody = await introResponse.text();
+        console.error("DeepSeek API intro error:", errorBody);
+        serverWebSocket.send(JSON.stringify({ error: "Failed to fetch intro message from DeepSeek API" }));
+      } else {
+        const introData = await introResponse.json();
+        console.log("DeepSeek intro response:", introData);
+        const introContent = introData.choices[0].message.content;
+        serverWebSocket.send(JSON.stringify({ response: introContent }));
+      }
+    } catch (error) {
+      console.error("Error fetching intro message:", error);
+      serverWebSocket.send(JSON.stringify({ error: "Error connecting to DeepSeek API for intro" }));
+    }
 
     serverWebSocket.addEventListener("message", async (event) => {
       try {
@@ -119,13 +163,18 @@ export default {
         processing.set(conversationId, true);
         const messages = conversations.get(conversationId);
         messages.push({ role: "user", content: message });
-        serverWebSocket.send(JSON.stringify({ progress: `You: ${message}` }));
+        // serverWebSocket.send(JSON.stringify({ progress: `You: ${message}` }));
 
         const maxIterations = 10;
         let iteration = 0;
 
         while (iteration < maxIterations) {
           try {
+            console.log("Calling DeepSeek API with payload:", {
+              model: "deepseek-chat",
+              messages,
+              tools: TOOLS,
+            });
             const response = await fetch(DEEPSEEK_API_URL, {
               method: "POST",
               headers: {
@@ -139,11 +188,17 @@ export default {
               }),
             });
 
+            console.log("DeepSeek API response status:", response.status);
             if (!response.ok) {
-              throw new Error(`DeepSeek API error ${response.status}`);
+              const errorBody = await response.text();
+              console.error("DeepSeek API error body:", errorBody);
+              throw new Error(`DeepSeek API error ${response.status}: ${errorBody}`);
             }
 
-            const { choices } = await response.json();
+            const data = await response.json();
+            console.log("DeepSeek API response:", data);
+
+            const { choices } = data;
             const messageResponse = choices[0].message;
             messages.push(messageResponse);
 
@@ -177,8 +232,8 @@ export default {
               const description =
                 messageResponse.content ||
                 (functionName === "run_sql_query"
-                  ? "Querying data..."
-                  : "Updating data...");
+                  ? "Querying data...[" + query + "]"
+                  : "Updating data...[" + query + "]");
               serverWebSocket.send(JSON.stringify({ progress: description }));
 
               if (functionName === "run_sql_query") {
@@ -191,7 +246,7 @@ export default {
                   break;
                 }
 
-                const result = await callSqlApi(query);
+                const result = await callSqlApi(query, SQL_API_BASE_URL);
                 const resultStr = JSON.stringify(result);
                 messages.push({
                   role: "tool",
@@ -214,7 +269,7 @@ export default {
                   break;
                 }
 
-                const result = await callSqlApi(query);
+                const result = await callSqlApi(query, SQL_API_BASE_URL);
                 const resultStr = JSON.stringify(result);
                 messages.push({
                   role: "tool",
@@ -232,6 +287,7 @@ export default {
 
             iteration++;
           } catch (error) {
+            console.error("Error in DeepSeek API call:", error);
             serverWebSocket.send(
               JSON.stringify({ error: `DeepSeek API error: ${error.message}` })
             );
@@ -247,6 +303,7 @@ export default {
 
         processing.set(conversationId, false);
       } catch (error) {
+        console.error("WebSocket message error:", error);
         serverWebSocket.send(
           JSON.stringify({ error: `Error: ${error.message}` })
         );
@@ -257,6 +314,7 @@ export default {
     serverWebSocket.addEventListener("close", () => {
       conversations.delete(conversationId);
       processing.delete(conversationId);
+      console.log("WebSocket closed for conversation:", conversationId);
     });
 
     serverWebSocket.addEventListener("error", (error) => {
