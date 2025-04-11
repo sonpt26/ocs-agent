@@ -16,37 +16,39 @@ const processing = new Map();
 const DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions";
 
 // Function to call SQL API
-async function callSqlApi(query, sqlApiBaseUrl) {
+async function callSqlApi(query, sqlApiBaseUrl, socket) {
   const upperQuery = query.toUpperCase();
   let url = "";
   if (upperQuery.includes("SELECT")) {
-    url = `${sqlApiBaseUrl}api/sql/query`;
+    url = `${sqlApiBaseUrl}/api/sql/query`;
   } else if (
     upperQuery.includes("INSERT") ||
     upperQuery.includes("UPDATE") ||
     upperQuery.includes("DELETE")
   ) {
-    url = `${sqlApiBaseUrl}api/sql/mutate`;
+    url = `${sqlApiBaseUrl}/api/sql/mutate`;
   } else {
     return { error: "Invalid query type" };
-  }
-  console.log("callSqlApi ", url)
-
+  }  
   try {
-    const response = await fetch(url, {
+    const rq = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ query }),
-    });
+    }
+    socket.send(
+      JSON.stringify({ progress: "Call API " + url + ". query " + query + ". rq " + JSON.stringify(rq) })
+    );
+    const response = await fetch(url, rq);        
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
     }
     const data = await response.json();
     console.log("Response from backend:", data);
     return data;
-  } catch (error) {
+  } catch (error) {    
     return { error: `API call error: ${error.message}` };
   }
 }
@@ -98,7 +100,7 @@ export default {
       },
     ]);
     processing.set(conversationId, false);
-    serverWebSocket.send(JSON.stringify({ error: "Xin chào. Tôi là trợ lý nghiệp vụ khai báo gói cước. Tôi có thể giúp gì bạn?" }));
+    serverWebSocket.send(JSON.stringify({ response: "Xin chào. Tôi là trợ lý nghiệp vụ khai báo gói cước. Tôi có thể giúp gì bạn?" }));
     serverWebSocket.addEventListener("message", async (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -206,7 +208,7 @@ export default {
                   break;
                 }
 
-                const result = await callSqlApi(query, SQL_API_BASE_URL);
+                const result = await callSqlApi(query, SQL_API_BASE_URL, serverWebSocket);
                 const resultStr = JSON.stringify(result);
                 messages.push({
                   role: "tool",
