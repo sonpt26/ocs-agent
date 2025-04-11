@@ -1,0 +1,14 @@
+name = "my-websocket-worker"
+main = "index.js"
+compatibility_date = "2025-04-11"
+
+# Enable Node.js compatibility for assert imports
+compatibility_flags = ["nodejs_compat"]
+
+# Bundle additional files
+[build]
+include = ["function_schemas.json", "prompt.md"]
+
+# wrangler.toml (wrangler v3.88.0^)
+[observability.logs]
+enabled = true

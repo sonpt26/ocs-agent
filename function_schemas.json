@@ -1,0 +1,31 @@
+[
+    {
+      "name": "run_sql_query",
+      "description": "Thực hiện câu lệnh SQL dạng SELECT để truy vấn dữ liệu từ hệ thống. Không sử dụng để thay đổi dữ liệu.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Câu lệnh SQL SELECT hợp lệ để lấy thông tin từ cơ sở dữ liệu"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "run_sql_mutation",
+      "description": "Thực hiện câu lệnh SQL thay đổi dữ liệu như INSERT, UPDATE hoặc DELETE.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Câu lệnh SQL hợp lệ (INSERT, UPDATE hoặc DELETE)"
+          }
+        },
+        "required": ["query"]
+      }
+    }
+  ]
+  
