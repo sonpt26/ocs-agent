@@ -20,16 +20,17 @@ async function callSqlApi(query, sqlApiBaseUrl) {
   const upperQuery = query.toUpperCase();
   let url = "";
   if (upperQuery.includes("SELECT")) {
-    url = `${sqlApiBaseUrl}/api/sql/query`;
+    url = `${sqlApiBaseUrl}api/sql/query`;
   } else if (
     upperQuery.includes("INSERT") ||
     upperQuery.includes("UPDATE") ||
     upperQuery.includes("DELETE")
   ) {
-    url = `${sqlApiBaseUrl}/api/sql/mutate`;
+    url = `${sqlApiBaseUrl}api/sql/mutate`;
   } else {
     return { error: "Invalid query type" };
   }
+  console.log("callSqlApi ", url)
 
   try {
     const response = await fetch(url, {
@@ -97,48 +98,7 @@ export default {
       },
     ]);
     processing.set(conversationId, false);
-
-    // Gửi thông điệp giới thiệu từ DeepSeek API
-    try {
-      const introMessages = [
-        {
-          role: "system",
-          content: `${SYSTEM_PROMPT}\n\nHãy tạo một thông điệp giới thiệu ngắn gọn về bản thân, mô tả bạn là DeepSeek, một trợ lý AI có khả năng thực thi truy vấn SQL (SELECT với run_sql_query, INSERT/UPDATE/DELETE với run_sql_mutation), và mời người dùng bắt đầu sử dụng bạn. Dùng tiếng Việt.`
-        }
-      ];
-
-      console.log("Calling DeepSeek API for intro message with payload:", {
-        model: "deepseek-chat",
-        messages: introMessages,
-      });
-
-      const introResponse = await fetch(DEEPSEEK_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "deepseek-chat",
-          messages: introMessages,
-        }),
-      });
-
-      if (!introResponse.ok) {
-        const errorBody = await introResponse.text();
-        console.error("DeepSeek API intro error:", errorBody);
-        serverWebSocket.send(JSON.stringify({ error: "Failed to fetch intro message from DeepSeek API" }));
-      } else {
-        const introData = await introResponse.json();
-        console.log("DeepSeek intro response:", introData);
-        const introContent = introData.choices[0].message.content;
-        serverWebSocket.send(JSON.stringify({ response: introContent }));
-      }
-    } catch (error) {
-      console.error("Error fetching intro message:", error);
-      serverWebSocket.send(JSON.stringify({ error: "Error connecting to DeepSeek API for intro" }));
-    }
-
+    serverWebSocket.send(JSON.stringify({ error: "Xin chào. Tôi là trợ lý nghiệp vụ khai báo gói cước. Tôi có thể giúp gì bạn?" }));
     serverWebSocket.addEventListener("message", async (event) => {
       try {
         const data = JSON.parse(event.data);
