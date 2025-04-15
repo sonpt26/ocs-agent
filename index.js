@@ -43,7 +43,7 @@ async function callSqlApi(query, sqlApiBaseUrl, socket, env) {
       throw new Error(`HTTP error ${response.status}`);
     }
     const data = await response.json();
-    console.log("Response from backend:", data);
+    // console.log("Response from backend:", data);
     socket.send(
       JSON.stringify({ progress: "Call API " + url + ". response " + response.status})
     );
@@ -135,11 +135,11 @@ export default {
 
         while (iteration < maxIterations) {
           try {
-            console.log("Calling DeepSeek API with payload:", {
-              model: "deepseek-chat",
-              messages,
-              tools: TOOLS,
-            });
+            // console.log("Calling DeepSeek API with payload:", {
+            //   model: "deepseek-chat",
+            //   messages,
+            //   tools: TOOLS,
+            // });
             const response = await fetch(DEEPSEEK_API_URL, {
               method: "POST",
               headers: {
@@ -161,7 +161,7 @@ export default {
             }
 
             const data = await response.json();
-            console.log("DeepSeek API response:", data);
+            // console.log("DeepSeek API response:", data);
 
             const { choices } = data;
             const messageResponse = choices[0].message;

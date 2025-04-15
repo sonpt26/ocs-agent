@@ -12,6 +12,7 @@ include = ["function_schemas.json", "prompt.md"]
 # wrangler.toml (wrangler v3.88.0^)
 [observability.logs]
 enabled = true
+head_sampling_rate = 1
 
 [env.production.vars]
 DEEPSEEK_API_KEY = "sk-c1025eafaea049909360bb3ef9add2a9"
